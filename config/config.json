@@ -1,164 +1,163 @@
 {
+  "meta": {
+    "scale_um": 200,
+    "units": "um",
+    "description": "Constellations and stars normalized. Distances are computed from coordinates (Euclidean). Blocked edges and investigation parameters are set before simulation starts."
+  },
   "constellations": [
     {
-      "name": "Constelación del Burro",
-      "starts": [
-        {
-          "id": 1,
-          "label": "Alpha1",
-          "linkedTo": [
-            {
-              "starId": 2,
-              "distance": 120
-            },
-            {
-              "starId": 4,
-              "distance": 87
-            },
-            {
-              "starId": 5,
-              "distance": 101
-            }
-          ],
-          "radius": 0.4,
-          "timeToEat": 3,
-          "amountOfEnergy": 1,
-          "coordenates": {
-            "x": 25,
-            "y": 34
-          },
-          "hypergiant": false
-        },
-        {
-          "id": 2,
-          "label": "Beta23",
-          "linkedTo": [
-            {
-              "starId": 1,
-              "distance": 120
-            },
-            {
-              "starId": 7,
-              "distance": 45
-            },
-            {
-              "starId": 3,
-              "distance": 17
-            }
-          ],
-          "radius": 0.2,
-          "timeToEat": 2,
-          "amountOfEnergy": 2,
-          "coordenates": {
-            "x": 37,
-            "y": 15
-          },
-          "hypergiant": false
-        },
-        {
-          "id": 3,
-          "label": "Alpha53",
-          "linkedTo": [
-            {
-              "starId": 5,
-              "distance": 86
-            },
-            {
-              "starId": 2,
-              "distance": 17
-            },
-            {
-              "starId": 9,
-              "distance": 15
-            }
-          ],
-          "radius": 1,
-          "timeToEat": 1,
-          "amountOfEnergy": 3,
-          "coordenates": {
-            "x": 75,
-            "y": 43
-          },
-          "hypergiant": true
-        }
-      ]
+      "id": "c1",
+      "name": "Donkey Constellation",
+      "color": "#1f77b4",
+      "stars": [1, 2, 3, 4, 5, 7, 9]
     },
     {
-      "name": "Constelación de la Araña",
-      "starts": [
-        {
-          "id": 12,
-          "label": "Beta178",
-          "linkedTo": [
-            {
-              "starId": 14,
-              "distance": 120
-            },
-            {
-              "starId": 17,
-              "distance": 87
-            },
-            {
-              "starId": 11,
-              "distance": 101
-            }
-          ],
-          "radius": 0.6,
-          "timeToEat": 3,
-          "amountOfEnergy": 1,
-          "coordenates": {
-            "x": 123,
-            "y": 167
-          },
-          "hypergiant": false
-        },
-        {
-          "id": 13,
-          "label": "Gama23",
-          "linkedTo": [
-            {
-              "starId": 15,
-              "distance": 120
-            },
-            {
-              "starId": 17,
-              "distance": 45
-            }
-          ],
-          "radius": 0.8,
-          "timeToEat": 3,
-          "amountOfEnergy": 5,
-          "coordenates": {
-            "x": 189,
-            "y": 146
-          },
-          "hypergiant": true
-        },
-        {
-          "id": 3,
-          "label": "Alpha53",
-          "linkedTo": [
-            {
-              "starId": 12,
-              "distance": 15
-            }
-          ],
-          "radius": 1,
-          "timeToEat": 1,
-          "amountOfEnergy": 3,
-          "coordenates": {
-            "x": 75,
-            "y": 43
-          },
-          "hypergiant": true
-        }
-      ]
+      "id": "c2",
+      "name": "Spider Constellation",
+      "color": "#ff7f0e",
+      "stars": [3, 11, 12, 13, 14, 15, 17]
     }
   ],
-  "burroenergiaInicial": 100,
-  "estadoSalud": "Excelente",
-  "pasto": 300,
-  "number": 123,
-  "startAge": 12,
-  "deathAge": 3567
+  "stars": [
+    {
+      "id": 1,
+      "label": "Alpha1",
+      "coordinates": { "x": 25, "y": 34 },
+      "radius": 0.4,
+      "timeToEatHoursPerKg": 3,
+      "hypergiant": false,
+      "investigations": []
+    },
+    {
+      "id": 2,
+      "label": "Beta23",
+      "coordinates": { "x": 37, "y": 15 },
+      "radius": 0.2,
+      "timeToEatHoursPerKg": 2,
+      "hypergiant": false,
+      "investigations": []
+    },
+    {
+      "id": 3,
+      "label": "Alpha53",
+      "coordinates": { "x": 75, "y": 43 },
+      "radius": 1.0,
+      "timeToEatHoursPerKg": 1,
+      "hypergiant": true,
+      "investigations": []
+    },
+    {
+      "id": 4,
+      "label": "Star4",
+      "coordinates": { "x": 10, "y": 60 },
+      "radius": 0.35,
+      "timeToEatHoursPerKg": 2,
+      "hypergiant": false,
+      "investigations": []
+    },
+    {
+      "id": 5,
+      "label": "Star5",
+      "coordinates": { "x": 55, "y": 70 },
+      "radius": 0.5,
+      "timeToEatHoursPerKg": 2,
+      "hypergiant": false,
+      "investigations": []
+    },
+    {
+      "id": 7,
+      "label": "Star7",
+      "coordinates": { "x": 40, "y": 8 },
+      "radius": 0.3,
+      "timeToEatHoursPerKg": 2,
+      "hypergiant": false,
+      "investigations": []
+    },
+    {
+      "id": 9,
+      "label": "Star9",
+      "coordinates": { "x": 80, "y": 58 },
+      "radius": 0.25,
+      "timeToEatHoursPerKg": 1,
+      "hypergiant": false,
+      "investigations": []
+    },
+    {
+      "id": 11,
+      "label": "Star11",
+      "coordinates": { "x": 195, "y": 160 },
+      "radius": 0.45,
+      "timeToEatHoursPerKg": 3,
+      "hypergiant": false,
+      "investigations": []
+    },
+    {
+      "id": 12,
+      "label": "Beta178",
+      "coordinates": { "x": 123, "y": 167 },
+      "radius": 0.6,
+      "timeToEatHoursPerKg": 3,
+      "hypergiant": false,
+      "investigations": []
+    },
+    {
+      "id": 13,
+      "label": "Gama23",
+      "coordinates": { "x": 189, "y": 146 },
+      "radius": 0.8,
+      "timeToEatHoursPerKg": 3,
+      "hypergiant": true,
+      "investigations": []
+    },
+    {
+      "id": 14,
+      "label": "Star14",
+      "coordinates": { "x": 140, "y": 150 },
+      "radius": 0.4,
+      "timeToEatHoursPerKg": 2,
+      "hypergiant": false,
+      "investigations": []
+    },
+    {
+      "id": 15,
+      "label": "Star15",
+      "coordinates": { "x": 170, "y": 130 },
+      "radius": 0.35,
+      "timeToEatHoursPerKg": 2,
+      "hypergiant": false,
+      "investigations": []
+    },
+    {
+      "id": 17,
+      "label": "Star17",
+      "coordinates": { "x": 160, "y": 140 },
+      "radius": 0.3,
+      "timeToEatHoursPerKg": 2,
+      "hypergiant": false,
+      "investigations": []
+    }
+  ],
+  "edges": [
+    { "u": 1, "v": 2, "blocked": false },
+    { "u": 1, "v": 4, "blocked": false },
+    { "u": 1, "v": 5, "blocked": false },
+    { "u": 2, "v": 7, "blocked": false },
+    { "u": 2, "v": 3, "blocked": false },
+    { "u": 3, "v": 5, "blocked": false },
+    { "u": 3, "v": 9, "blocked": false },
+    { "u": 12, "v": 14, "blocked": false },
+    { "u": 12, "v": 17, "blocked": false },
+    { "u": 12, "v": 11, "blocked": false },
+    { "u": 13, "v": 15, "blocked": false },
+    { "u": 13, "v": 17, "blocked": false },
+    { "u": 3, "v": 12, "blocked": false },
+    { "u": 11, "v": 13, "blocked": false }
+  ],
+  "initial_state": {
+    "initialEnergyPercent": 100,
+    "healthState": "Excellent",
+    "grassKg": 300,
+    "currentAgeYears": 12,
+    "deathAgeYears": 100
+  }
 }

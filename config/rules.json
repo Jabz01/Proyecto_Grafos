@@ -1,0 +1,63 @@
+{
+  "rules": {
+    "ids": {
+      "requireUniqueStarId": true,
+      "maxHypergiantsPerConstellation": 2
+    },
+    "timeAndLife": {
+      "useDistanceAsYearsOfLifeLoss": true,
+      "distanceLyToYearsFactor": 0.05,
+      "hoursOfStayToYearsFactor": 1.0e-4,
+      "maxFractionOfStayForEating": 0.5
+    },
+    "energy": {
+      "maxEnergyPercent": 100,
+      "energyConsumptionPerLyPercent": 0.5,
+      "energyLossPerInvestigationHourPercent": 0.2,
+      "energyGainPerKgByHealthPercent": {
+        "Excellent": 5,
+        "Good": 3,
+        "Bad": 2,
+        "NearDeath": 1,
+        "Dead": 0
+      },
+      "applyEnergyCap100": true
+    },
+    "feeding": {
+      "eatOnlyIfEnergyBelowPercent": 50,
+      "minKgPerEat": 0.1,
+      "maxKgConsumablePerVisitKg": null
+    },
+    "hypergiant": {
+      "energyRechargeMultiplier": 1.5,
+      "grassDuplicateMultiplier": 2,
+      "interstellarTravelYearsLoss": 0.0,
+      "allowUserChooseDestinationAfterHypergiant": true
+    },
+    "planning": {
+      "routeAGoal": "maxStarsBeforeDeath",
+      "routeBGoal": "maxStarsMinimizeEnergyThenTime",
+      "heuristicDefaults": {
+        "beamWidth": 12,
+        "maxDepth": 50,
+        "pruneTimeMarginYears": 0.05
+      }
+    },
+    "simulation": {
+      "animationFps": 10,
+      "useMatplotlibAnimation": true,
+      "autoReplanOnBlock": false,
+      "blocksDecidedBeforeStart": true,
+      "logEachStep": true
+    },
+    "validation": {
+      "enforceBidirectionalEdges": true,
+      "repairMissingInverseEdge": true,
+      "rejectDuplicateStarDefinitions": true
+    },
+    "conversion": {
+      "yearsPerLy": 0.05,
+      "comment": "Factor: 20 ly = 1 year => 1 ly = 1/20 = 0.05 years"
+    }
+  }
+}
