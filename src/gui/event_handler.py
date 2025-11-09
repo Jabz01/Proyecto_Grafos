@@ -1,14 +1,14 @@
 # src/gui/event_handler.py
 import threading
-from typing import Optional, Tuple, List, Dict
+from typing import Optional, Tuple, List, Dict, Callable
 import networkx as nx
 import matplotlib.pyplot as plt
-import threading
 
 from src.model.edge import pick_nearest_edge
 from src.utils.visual import nearest_node_by_radius
 from src.utils.graph_utils import filtered_graph_nx
 from src.planner.dijkstra_planner import shortest_path_dijkstra
+from src.gui.route_form import RouteForm
 
 # constantes a nivel de módulo (usadas desde universe.py)
 MODE_NONE = 0
@@ -26,106 +26,84 @@ class EventHandler:
     - fig: figura matplotlib (necesaria si el handler crea widgets en el futuro)
     """
     def __init__(self, graph_model, Gnx: nx.Graph, pos: Dict[int, Tuple[float,float]], radii: Dict[int, float],
-                 redraw_callback=None, set_instruction_callback=None, fig: plt.Figure = None):
+                 redraw_callback: Optional[Callable[[], None]] = None,
+                 set_instruction_callback: Optional[Callable[[str], None]] = None,
+                 fig: Optional[plt.Figure] = None):
         self.graph_model = graph_model
-        # inicializar referencias con la vista que nos pasan (se sincronizará si el modelo cambia)
         self.G = Gnx
         self.pos = pos
         self.radii = radii
         self._redraw = redraw_callback or (lambda: None)
         self._set_instruction = set_instruction_callback or (lambda t: None)
         self.fig = fig
+
+        # locks / estado
         self._state_lock = threading.RLock()
 
-        # estado interactivo
+        # interacción
         self.mode = MODE_NONE
         self.route_selection_stage = 0
         self.route_origin: Optional[int] = None
         self.route_target: Optional[int] = None
         self.current_path: Optional[List[int]] = None
 
+        # selección / propuesta / formulario
+        self.selected_origin: Optional[int] = None
+        self.selected_target: Optional[int] = None
+        self.proposed_path: Optional[List[int]] = None
+        self.proposed_sums: Optional[dict] = None  # {"sum_ly": float, "sum_years": float}
+        self.form: Optional[RouteForm] = None
+
         self._clear_timer = None
 
-    # ------------------ sincronización central ------------------
+    # ------------------ helpers visual / sync ------------------
+
     def _pick_node_at_display(self, xdata: float, ydata: float) -> Optional[int]:
-        """
-        Devuelve el id del nodo cuyo marcador en pantalla contiene el punto (xdata,ydata).
-        Calcula el radio visual a partir del node_size usado en la vista (node_size = BASE_NODE_SIZE*radius*scale).
-        """
+        """Pick node if click falls anywhere inside its visual marker (pixels)."""
         try:
-            # transformador data -> display (pixels)
-            trans = self.fig.axes[0].transData if (self.fig and self.fig.axes) else None
-            if trans is None:
-                trans = self.fig.canvas.renderer.transform if hasattr(self.fig.canvas, "renderer") else None
-            # fallback simple: usar transData desde matplotlib global (plt.gca)
-            if trans is None:
-                trans = plt.gca().transData
-
+            ax = self.fig.axes[0] if (self.fig and self.fig.axes) else plt.gca()
+            trans = ax.transData
             click_px = trans.transform((xdata, ydata))
-
-            # recuperar dpi para convertir puntos -> pixels
             dpi = self.fig.dpi if self.fig is not None else plt.gcf().dpi
-
-            # calcular marker area (points^2) como en universe: node_size = BASE_NODE_SIZE * radius * scale
-            # Reusar la misma BASE_NODE_SIZE que usas en universe (500.0)
             BASE_NODE_SIZE = 500.0
 
-            best = None
             for n, (nx_, ny_) in self.pos.items():
                 node_px = trans.transform((nx_, ny_))
-                # determinar node_size (points^2) usado en el dibujo:
                 radius = self.radii.get(n, 1.0)
-                hyper = False
-                try:
-                    hyper = bool(self.G.nodes[n].get("hypergiant", False))
-                except Exception:
-                    pass
+                hyper = bool(self.G.nodes[n].get("hypergiant", False)) if n in self.G.nodes else False
                 scale = 1.6 if hyper else 1.0
-                marker_area_points2 = BASE_NODE_SIZE * radius * scale
-                # matplotlib marker radius in points = sqrt(area)/2
-                marker_r_points = (marker_area_points2 ** 0.5) / 2.0
-                # convertir points -> pixels: 1 point = dpi/72 pixels
-                marker_r_px = marker_r_points * (dpi / 72.0)
+                area_pts2 = BASE_NODE_SIZE * radius * scale
+                r_pts = (area_pts2 ** 0.5) / 2.0
+                r_px = r_pts * (dpi / 72.0)
                 dx = click_px[0] - node_px[0]
                 dy = click_px[1] - node_px[1]
-                dist_px = (dx*dx + dy*dy) ** 0.5
-                if dist_px <= marker_r_px:
-                    best = n
-                    break
-            return best
+                if (dx*dx + dy*dy) ** 0.5 <= r_px:
+                    return n
+            return None
         except Exception:
-            # fallback: usar nearest_node_by_radius con mayor threshold
             return nearest_node_by_radius(self.pos, self.radii, xdata, ydata, threshold_mult=1.6)
+
     def _sync_from_model(self):
-        """
-        Refresca self.G, self.pos y self.radii desde el graph_model.
-        No sobreescribe coordenadas existentes salvo que la vista nueva las contenga.
-        """
+        """Refresca self.G, self.pos y self.radii desde el graph_model."""
         try:
             new_G = self.graph_model.ToNetworkX()
         except Exception as exc:
             print(f"[EventHandler] _sync_from_model: ToNetworkX() falló: {exc}")
             return
 
-        # si punteros distintos, reemplazamos la referencia
         if id(new_G) != id(self.G):
-            # para depuración durante desarrollo
-            print(f"[EventHandler] sincronizando vista NetworkX (old id={id(self.G)} new id={id(new_G)})")
             self.G = new_G
 
-        # actualizar pos/radii conservando valores existentes cuando falte info en la vista
         try:
             for n in list(self.pos.keys()):
                 if n in self.G.nodes:
                     coords = self.G.nodes[n].get("coordinates")
                     if coords and ("x" in coords) and ("y" in coords):
                         self.pos[n] = (coords["x"], coords["y"])
-                    # radius: si la vista trae radius lo usamos, si no, preservamos el existente
                     if "radius" in self.G.nodes[n]:
                         try:
                             self.radii[n] = float(self.G.nodes[n].get("radius", self.radii.get(n, 1.0)))
                         except Exception:
-                            # mantener el valor previo si conversión falla
                             pass
         except Exception as exc:
             print(f"[EventHandler] _sync_from_model: fallo al sincronizar pos/radii: {exc}")
@@ -143,11 +121,17 @@ class EventHandler:
         self._redraw()
 
     def start_route_selection(self):
+        """Comienza la selección de origen y destino."""
         self.mode = MODE_ROUTE_SELECT
         self.route_selection_stage = 1
         self.route_origin = None
         self.route_target = None
         self.current_path = None
+        # limpiar propuestas previas
+        self.proposed_path = None
+        self.proposed_sums = None
+        self.selected_origin = None
+        self.selected_target = None
         self._set_instruction("Seleccionar estrella de origen")
         self._redraw()
 
@@ -157,10 +141,14 @@ class EventHandler:
         self.route_origin = None
         self.route_target = None
         self.current_path = None
+        self.selected_origin = None
+        self.selected_target = None
+        self.proposed_path = None
+        self.proposed_sums = None
         self._set_instruction("")
         self._redraw()
 
-    # ------------------ evento de click ------------------
+    # ------------------ eventos de interacción ------------------
 
     def on_click(self, event):
         if event.xdata is None or event.ydata is None:
@@ -174,14 +162,21 @@ class EventHandler:
             node = self._pick_node_at_display(event.xdata, event.ydata)
             if node is None:
                 return
+
             if self.route_selection_stage == 1:
+                # seleccionar origen
                 self.route_origin = node
+                self.selected_origin = node
                 self.route_selection_stage = 2
                 self._set_instruction("Seleccionar estrella de destino")
                 self._redraw()
                 return
+
             elif self.route_selection_stage == 2:
+                # seleccionar destino y proponer ruta
                 self.route_target = node
+                self.selected_target = node
+
                 if self.route_origin == self.route_target:
                     with self._state_lock:
                         self.current_path = [self.route_origin]
@@ -192,43 +187,68 @@ class EventHandler:
                     self._redraw()
                     return
 
-                # Lanzar cálculo de ruta en background para no bloquear la UI
                 origin = self.route_origin
                 target = self.route_target
 
-                def _compute_route_worker():
+                # lanzar worker que calcula propuesta y abre el formulario cuando termine
+                def _worker():
                     try:
-                        # usar grafo filtrado (copia) para evitar que shortest_path mutile la vista
                         Gf = filtered_graph_nx(self.G)
                         res = shortest_path_dijkstra(Gf, origin, target, weight="yearsCost")
                         if res is None:
-                            # no path
                             with self._state_lock:
-                                self.current_path = None
-                            # actualizar instrucciones y pedir redraw seguro
+                                self.proposed_path = None
+                                self.proposed_sums = {"sum_ly": 0.0, "sum_years": 0.0}
                             self._set_instruction("No hay ruta entre origen y destino")
                             self._start_clear_instruction_timer(2.0)
                         else:
                             path, total = res
+                            sum_years = 0.0
+                            sum_ly = 0.0
+                            for a, b in zip(path[:-1], path[1:]):
+                                attrs = self.G.get_edge_data(a, b) or {}
+                                if attrs.get("blocked"):
+                                    continue
+                                try:
+                                    sum_years += float(attrs.get("yearsCost", 0.0))
+                                except Exception:
+                                    pass
+                                try:
+                                    sum_ly += float(attrs.get("distanceLy", 0.0))
+                                except Exception:
+                                    pass
                             with self._state_lock:
-                                self.current_path = path
-                            # usar formato ligero para instrucción
-                            self._set_instruction(f"Ruta encontrada (cost={total})")
-                            self._start_clear_instruction_timer(2.0)
+                                self.proposed_path = path
+                                self.proposed_sums = {"sum_ly": sum_ly, "sum_years": sum_years}
+
+                            origin_label = self.G.nodes[origin].get("label", str(origin))
+                            target_label = self.G.nodes[target].get("label", str(target))
+                            burro_info = {"estado": "pendiente"}
+
+                            # abrir formulario en hilo de eventos
+                            try:
+                                # crear form si no existe
+                                if self.form is None:
+                                    self.form = RouteForm(self.fig,
+                                                          on_compute=self.finalize_route_calculation,
+                                                          on_close=self.close_form)
+                                # show debe ejecutarse en hilo principal; draw_idle garantiza seguridad
+                                self.form.show(origin_label, target_label, sum_ly, sum_years, burro_info)
+                            except Exception as exc:
+                                print(f"[EventHandler] fallo abriendo formulario: {exc}")
+
                     except Exception as exc:
-                        # logging mínimo para depuración
-                        print(f"[EventHandler] route worker failed: {exc}")
+                        print(f"[EventHandler] route proposal worker failed: {exc}")
                         with self._state_lock:
-                            self.current_path = None
-                        self._set_instruction("Error al calcular ruta")
+                            self.proposed_path = None
+                            self.proposed_sums = {"sum_ly": 0.0, "sum_years": 0.0}
+                        self._set_instruction("Error al calcular propuesta de ruta")
                         self._start_clear_instruction_timer(2.0)
                     finally:
-                        # garantizar que la UI se redibuje desde el hilo de eventos de matplotlib
                         try:
                             if self.fig is not None and hasattr(self.fig.canvas, "draw_idle"):
                                 self.fig.canvas.draw_idle()
                             else:
-                                # fallback: llamar a redraw (puede ser menos seguro si no estamos en hilo UI)
                                 self._redraw()
                         except Exception:
                             try:
@@ -236,12 +256,11 @@ class EventHandler:
                             except Exception:
                                 pass
 
-                # cambiar estado interactivo y lanzar thread
                 self.route_selection_stage = 0
                 self.mode = MODE_NONE
-                worker = threading.Thread(target=_compute_route_worker, daemon=True)
-                worker.start()
+                threading.Thread(target=_worker, daemon=True).start()
                 return
+
     # ------------------ bloqueo de arista ------------------
 
     def _handle_block_click(self, x: float, y: float):
@@ -252,24 +271,60 @@ class EventHandler:
             return
         (u, v), dist = pick
 
-        # Intentamos alternar el estado en el modelo (GraphModel es la fuente de verdad)
         try:
-            # ToggleEdgeBlocked(u, v) debe devolver el nuevo estado booleano
             new_state = self.graph_model.ToggleEdgeBlocked(u, v)
-            # asegurar que la vista se sincronice con lo que el modelo tiene ahora
             self._sync_from_model()
         except Exception as exc:
-            # Log corto para depuración en desarrollo
             print(f"[EventHandler] ToggleEdgeBlocked failed for ({u},{v}): {exc}")
-            # Fallback razonable: mutar localmente para mantener la UX responsiva
             try:
                 cur = self.G[u][v].get("blocked", False)
                 self.G[u][v]["blocked"] = not cur
             except Exception:
                 pass
 
-        # invalidar ruta calculada (si existía) y redibujar
         self.current_path = None
+        self._redraw()
+
+    # ------------------ formulario / confirmación ------------------
+
+    def _open_route_form(self):
+        if not self.proposed_path or not self.proposed_sums:
+            return
+        origin = self.selected_origin
+        target = self.selected_target
+        if origin is None or target is None:
+            return
+        origin_label = self.G.nodes[origin].get("label", str(origin))
+        target_label = self.G.nodes[target].get("label", str(target))
+        burro_info = {"estado": "pendiente"}
+        if self.form is None:
+            self.form = RouteForm(self.fig,
+                                  on_compute=self.finalize_route_calculation,
+                                  on_close=self.close_form)
+        self.form.show(origin_label, target_label, self.proposed_sums["sum_ly"], self.proposed_sums["sum_years"], burro_info)
+
+    def close_form(self):
+        if self.form:
+            try:
+                self.form.hide()
+            except Exception:
+                pass
+        # no aplicar la ruta; mantener selección visible
+        self._redraw()
+
+    def finalize_route_calculation(self):
+        """Callback cuando el usuario pulsa 'Calcular' en el formulario."""
+        with self._state_lock:
+            if not self.proposed_path:
+                self._set_instruction("No hay ruta propuesta")
+                self._start_clear_instruction_timer(2.0)
+                return
+            self.current_path = list(self.proposed_path)
+
+        # cerrar formulario y confirmar
+        self.close_form()
+        self._set_instruction("Ruta confirmada")
+        self._start_clear_instruction_timer(2.0)
         self._redraw()
 
     # ------------------ temporizador para limpiar instrucciones ------------------
@@ -283,7 +338,6 @@ class EventHandler:
         def _clear():
             try:
                 self._set_instruction("")
-                # preferir draw_idle para notificar al hilo de eventos
                 if self.fig is not None and hasattr(self.fig.canvas, "draw_idle"):
                     try:
                         self.fig.canvas.draw_idle()

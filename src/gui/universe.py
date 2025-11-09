@@ -8,7 +8,7 @@ from typing import Dict, Tuple, Optional
 
 from src.gui.ui_buttons import create_buttons
 from src.gui.loadGraph import LoadGraphFromJson
-from src.gui.event_handler import EventHandler, MODE_BLOCK
+from src.gui.event_handler import EventHandler
 from src.utils.visual import node_size
 from src.utils.formatting import round_sig, format_edge_label
 from src.utils.graph_utils import path_total_cost, filtered_graph_nx
@@ -31,7 +31,7 @@ def VisualizeUniverse(config_path: str = "config/config.json", rules_path: str =
     Gnx = graph.ToNetworkX()
     constellations = graph.options.params.get("constellations", [])
 
-    # mapear color y constelación por estrella
+    # mapear color y constelación por estrella (valores por defecto)
     starToColor: Dict[int, str] = {}
     starToConstellation: Dict[int, str] = {}
     for c in constellations:
@@ -40,7 +40,8 @@ def VisualizeUniverse(config_path: str = "config/config.json", rules_path: str =
         for sid in c.get("stars", []):
             starToColor[sid] = color
             starToConstellation[sid] = name
-            
+
+    # sobrescribir color para hipergigantes
     for n in Gnx.nodes:
         try:
             if Gnx.nodes[n].get("hypergiant"):
@@ -56,7 +57,7 @@ def VisualizeUniverse(config_path: str = "config/config.json", rules_path: str =
         pos[n] = (coords.get("x", 0), coords.get("y", 0))
         radii[n] = float(Gnx.nodes[n].get("radius", 1.0))
 
-    # figura y ax
+    # figura y ax (no toggle automático a pantalla completa)
     fig = plt.figure(figsize=(11, 8), facecolor="black")
     ax = fig.add_axes([0.0, 0.08, 1.0, 0.90])
     ax.set_facecolor("black")
@@ -64,6 +65,13 @@ def VisualizeUniverse(config_path: str = "config/config.json", rules_path: str =
     handler: Optional[EventHandler] = None  # definido después
 
     def redraw():
+        # sincronizar vista del handler con el modelo antes de dibujar
+        if handler is not None:
+            try:
+                handler._sync_from_model()
+            except Exception:
+                pass
+
         ax.clear()
         ax.set_facecolor("black")
 
@@ -80,8 +88,27 @@ def VisualizeUniverse(config_path: str = "config/config.json", rules_path: str =
             ax.text(cx, cy, c.get("name", c.get("id")), fontsize=12, fontweight="bold",
                     ha="center", va="center", color="white", bbox=bbox_props)
 
-        # nodos
-        node_colors = [starToColor.get(n, "#444444") for n in Gnx.nodes]
+        # nodos: calcular colores con prioridad: selección origen/destino > hypergiant rojo > constelación color > fallback
+        node_colors = []
+        for n in Gnx.nodes:
+            # color base: constelación o fallback
+            base_color = starToColor.get(n, "#444444")
+            # hipergiant tiene prioridad sobre color de constelación
+            try:
+                if Gnx.nodes[n].get("hypergiant"):
+                    base_color = "#ff3333"
+            except Exception:
+                pass
+
+            # override por selección en handler
+            if handler and getattr(handler, "selected_origin", None) == n:
+                node_colors.append("yellow")
+            elif handler and getattr(handler, "selected_target", None) == n:
+                # destino seleccionado aparece azul antes de confirmar
+                node_colors.append("deepskyblue")
+            else:
+                node_colors.append(base_color)
+
         node_sizes = [node_size(radii.get(n, 1.0), Gnx.nodes[n].get("hypergiant", False)) for n in Gnx.nodes]
         nx.draw_networkx_nodes(Gnx, pos, node_color=node_colors, node_size=node_sizes,
                                linewidths=1.0, edgecolors="white", alpha=0.95, ax=ax)
@@ -94,7 +121,11 @@ def VisualizeUniverse(config_path: str = "config/config.json", rules_path: str =
         for u, v, attrs in Gnx.edges(data=True):
             edge_colors.append("red" if attrs.get("blocked") else "#aaaaaa")
             years = attrs.get("yearsCost", 0)
-            edge_widths.append(3.0 if years > 5 else 1.4)
+            try:
+                years_val = float(years)
+            except Exception:
+                years_val = 0.0
+            edge_widths.append(3.0 if years_val > 5 else 1.4)
         nx.draw_networkx_edges(Gnx, pos, edge_color=edge_colors, width=edge_widths, alpha=0.95, ax=ax)
 
         # etiquetas de arista (sin bbox, centradas en la línea)
@@ -107,14 +138,12 @@ def VisualizeUniverse(config_path: str = "config/config.json", rules_path: str =
         # aplicar halo / máscara a cada etiqueta para "borrar" la línea que pasa por detrás del texto
         if isinstance(edge_label_dict, dict):
             bg_color = ax.get_facecolor() if hasattr(ax, "get_facecolor") else "black"
-            # si bg_color es RGBA, matplotlib acepta ese como foreground en Stroke
             for txt in edge_label_dict.values():
                 try:
                     txt.set_bbox(None)
                 except Exception:
                     pass
                 try:
-                    # ancho del stroke ajustable; 3.0 suele ser suficiente
                     txt.set_path_effects([pe.Stroke(linewidth=3.0, foreground=bg_color), pe.Normal()])
                     txt.set_color("white")
                     try:
@@ -122,7 +151,6 @@ def VisualizeUniverse(config_path: str = "config/config.json", rules_path: str =
                     except Exception:
                         pass
                 except Exception:
-                    # fallback: dibujar texto de fondo negro detrás
                     try:
                         x, y = txt.get_position()
                         ax.text(x, y, txt.get_text(), transform=txt.get_transform(),
@@ -131,7 +159,7 @@ def VisualizeUniverse(config_path: str = "config/config.json", rules_path: str =
                     except Exception:
                         pass
 
-        # resaltar ruta si existe
+        # resaltar ruta confirmada si existe (handler.current_path)
         try:
             if handler and getattr(handler, "current_path", None):
                 path = handler.current_path
@@ -173,10 +201,10 @@ def VisualizeUniverse(config_path: str = "config/config.json", rules_path: str =
     handler = EventHandler(graph, Gnx, pos, radii, redraw_callback=redraw, set_instruction_callback=set_instruction, fig=fig)
     fig.canvas.mpl_connect('button_press_event', handler.on_click)
 
-    # botones
+    # botones (usar select_route como botón global para iniciar selección)
     buttons = create_buttons(fig, {
         "toggle_block_mode": handler.toggle_block_mode,
-        "compute_route": handler.start_route_selection,
+        "select_route": handler.start_route_selection,
         "reset_mode": handler.reset_mode
     })
 
