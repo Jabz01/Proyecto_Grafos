@@ -40,6 +40,13 @@ def VisualizeUniverse(config_path: str = "config/config.json", rules_path: str =
         for sid in c.get("stars", []):
             starToColor[sid] = color
             starToConstellation[sid] = name
+            
+    for n in Gnx.nodes:
+        try:
+            if Gnx.nodes[n].get("hypergiant"):
+                starToColor[n] = "#ff3333"  # rojo para hipergigantes
+        except Exception:
+            pass
 
     # posiciones y radios
     pos: Dict[int, Tuple[float, float]] = {}
