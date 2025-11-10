@@ -32,7 +32,6 @@ def VisualizeUniverse(config_path: str = "config/config.json", rules_path: str =
     from src.sim.populate_star_defaults import populate_star_defaults
     populate_star_defaults(Gnx.nodes(data=True), seed=graph.options.params.get("simulationSeed"))
 
-
     constellations = graph.options.params.get("constellations", [])
 
     # mapear color y constelación por estrella (valores por defecto)

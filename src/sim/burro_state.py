@@ -1,6 +1,7 @@
 from dataclasses import dataclass, field
-from typing import Set, Optional, Dict, Any
+from typing import Set, Optional, Dict, Any, List
 import copy
+import random
 
 @dataclass
 class BurroState:
@@ -11,11 +12,22 @@ class BurroState:
     grass_kg: float
     age_years: float = 0.0
     visited: Set[int] = field(default_factory=set)
-    log: list = field(default_factory=list)
+    log: List[str] = field(default_factory=list)
     meta: Dict[str, Any] = field(default_factory=dict)
 
+    # New structured event support
+    last_event: Optional[Dict[str, Any]] = None
+    event_log: List[Dict[str, Any]] = field(default_factory=list)
+
+    # Optional RNG instance for reproducible randomness per-state (can be None)
+    rng: Optional[random.Random] = None
+
     def clone(self) -> "BurroState":
-        return copy.deepcopy(self)
+        # deep copy but keep RNG reference shallow (so cloning does not reseed)
+        new = copy.deepcopy(self)
+        # keep same RNG object reference (not deepcopied)
+        new.rng = self.rng
+        return new
 
     def is_dead(self) -> bool:
         return self.health == "Dead" or self.life_years_left <= 0.0 or self.energy_pct <= 0.0
@@ -24,7 +36,6 @@ class BurroState:
         self.energy_pct += delta_pct
         if rules and rules.get("energy", {}).get("applyEnergyCap100", True):
             self.energy_pct = min(100.0, self.energy_pct)
-        # floor at 0 but don't change health here
         if self.energy_pct < 0:
             self.energy_pct = 0.0
 
@@ -35,3 +46,17 @@ class BurroState:
 
     def add_log(self, msg: str) -> None:
         self.log.append(msg)
+
+    # Helper to get RNG (state rng -> rules rng -> global)
+    def get_rng(self, rules: Dict = None):
+        if self.rng is not None:
+            return self.rng
+        seed = None
+        if rules:
+            seed = rules.get("rng_seed", None)
+        if seed is not None:
+            r = random.Random(seed)
+            # store it so subsequent calls are consistent
+            self.rng = r
+            return r
+        return random
