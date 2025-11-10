@@ -1,10 +1,16 @@
 import json
 import math
+import random
 from typing import Tuple, Dict, List, Any
 
 # Constantes por defecto
 DISTANCE_TO_YEARS_FACTOR_DEFAULT = 0.05
 MAX_HYPERGIANTS_PER_CONSTELLATION_DEFAULT = 2
+
+INVESTIGATION_YEARS_RANGE = (1.0, 5.0)
+TIME_PER_KG_YEARS_RANGE = (1.0, 5.0)
+INVEST_ENERGY_PCT_RANGE = (0.05, 0.5)
+
 
 class JSONValidationError(Exception):
     """Raised when input JSON structure is invalid."""
@@ -28,11 +34,6 @@ def BuildParserOutputFromJson(
     repairMissingInverseEdge: bool = True,
     maxHypergiantsPerConstellation: int = MAX_HYPERGIANTS_PER_CONSTELLATION_DEFAULT
 ) -> Tuple[Dict[str, Any], List[str], List[str]]:
-    """
-    Validate and normalize a scenario JSON and return a parserOutput dict.
-    Returns (parserOutput, warnings, errors)
-    parserOutput keys: 'stars', 'edges', 'constellations', 'initial_state', 'meta'
-    """
     warnings: List[str] = []
     errors: List[str] = []
 
@@ -45,7 +46,7 @@ def BuildParserOutputFromJson(
     edgesInput = data.get("edges", [])
     initialStateInput = data.get("initial_state", {})
 
-    # Validar unicidad y estructura de estrellas
+    # ---- Validar unicidad y estructura de estrellas (igual que antes) ----
     starsById: Dict[int, Dict[str, Any]] = {}
     for s in starsInput:
         sid = s.get("id")
@@ -68,6 +69,7 @@ def BuildParserOutputFromJson(
             "label": s.get("label", f"star{sid}"),
             "coordinates": {"x": coordX, "y": coordY},
             "radius": float(s.get("radius", 0.5)),
+            # campo legacy preserved but we will generate time_per_kg_years (years) below
             "timeToEatHoursPerKg": float(s.get("timeToEatHoursPerKg", 1)),
             "hypergiant": bool(s.get("hypergiant", False)),
             "investigations": list(s.get("investigations", []))
@@ -76,7 +78,7 @@ def BuildParserOutputFromJson(
     if errors:
         return {}, warnings, errors
 
-    # Validar hipergigantes por constelación
+    # ---- Validar hipergigantes por constelación (igual que antes) ----
     for c in constellationsInput:
         cid = c.get("id", c.get("name", "<no-id>"))
         cStars = c.get("stars", [])
@@ -84,7 +86,7 @@ def BuildParserOutputFromJson(
         if hipCount > maxHypergiantsPerConstellation:
             warnings.append(f"Constellation {cid} contains {hipCount} hypergiants (max {maxHypergiantsPerConstellation}).")
 
-    # Normalizar aristas
+    # ---- Normalizar aristas (igual que antes) ----
     edgesNorm: List[Dict[str, Any]] = []
     for e in edgesInput:
         u = e.get("u")
@@ -98,7 +100,7 @@ def BuildParserOutputFromJson(
         blocked = bool(e.get("blocked", False))
         edgesNorm.append({"u": int(u), "v": int(v), "blocked": blocked})
 
-    # Añadir aristas inversas si falta
+    # ---- Añadir aristas inversas si falta (igual que antes) ----
     if enforceBidirectional:
         seen = set((a["u"], a["v"]) for a in edgesNorm)
         toAdd = []
@@ -111,8 +113,28 @@ def BuildParserOutputFromJson(
                     warnings.append(f"Unidirectional edge detected {a['u']} -> {a['v']}")
         edgesNorm.extend(toAdd)
 
-    # Construir listas finales
+    # ---- Construir listas finales de estrellas y aristas ----
+    # Antes de construir starsOut, rellenamos atributos aleatorios por estrella si faltan
+    seed = meta.get("simulationSeed", None)
+    rng = random.Random(seed)
+
+    # ranges (podemos permitir que vengan en meta si se desea)
+    invest_years_min, invest_years_max = INVESTIGATION_YEARS_RANGE
+    time_per_kg_min, time_per_kg_max = TIME_PER_KG_YEARS_RANGE
+    invest_pct_min, invest_pct_max = INVEST_ENERGY_PCT_RANGE
+
+    # rellenar atributos por estrella (en starsById)
+    for sid, attr in starsById.items():
+        # Respect existing explicit attrs if present (mantener compatibilidad)
+        if "investigation_years" not in attr or attr.get("investigation_years") is None:
+            attr["investigation_years"] = round(rng.uniform(invest_years_min, invest_years_max), 4)
+        if "time_per_kg_years" not in attr or attr.get("time_per_kg_years") is None:
+            attr["time_per_kg_years"] = round(rng.uniform(time_per_kg_min, time_per_kg_max), 4)
+        if "invest_energy_per_year_pct" not in attr or attr.get("invest_energy_per_year_pct") is None:
+            attr["invest_energy_per_year_pct"] = round(rng.uniform(invest_pct_min, invest_pct_max), 6)
+
     starsOut = list(starsById.values())
+
     edgesOut = []
     for e in edgesNorm:
         u, v = e["u"], e["v"]
@@ -128,7 +150,7 @@ def BuildParserOutputFromJson(
             "yearsCost": yearsCost
         })
 
-    # Validar estado inicial
+    # ---- Validar estado inicial ----
     initialOut = dict(initialStateInput)
     if "initialEnergyPercent" not in initialOut:
         warnings.append("Missing 'initialEnergyPercent'. Defaulting to 100.")

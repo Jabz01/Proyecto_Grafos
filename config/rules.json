@@ -13,7 +13,7 @@
     "energy": {
       "maxEnergyPercent": 100,
       "energyConsumptionPerLyPercent": 0.5,
-      "energyLossPerInvestigationHourPercent": 0.2,
+      "energyLossPerInvestigationYearPercent": 0.2,
       "energyGainPerKgByHealthPercent": {
         "Excellent": 5,
         "Good": 3,

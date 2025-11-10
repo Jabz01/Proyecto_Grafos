@@ -29,6 +29,10 @@ def VisualizeUniverse(config_path: str = "config/config.json", rules_path: str =
             print("-", w)
 
     Gnx = graph.ToNetworkX()
+    from src.sim.populate_star_defaults import populate_star_defaults
+    populate_star_defaults(Gnx.nodes(data=True), seed=graph.options.params.get("simulationSeed"))
+
+
     constellations = graph.options.params.get("constellations", [])
 
     # mapear color y constelación por estrella (valores por defecto)
@@ -41,13 +45,6 @@ def VisualizeUniverse(config_path: str = "config/config.json", rules_path: str =
             starToColor[sid] = color
             starToConstellation[sid] = name
 
-    # sobrescribir color para hipergigantes
-    for n in Gnx.nodes:
-        try:
-            if Gnx.nodes[n].get("hypergiant"):
-                starToColor[n] = "#ff3333"  # rojo para hipergigantes
-        except Exception:
-            pass
 
     # posiciones y radios
     pos: Dict[int, Tuple[float, float]] = {}
@@ -91,23 +88,21 @@ def VisualizeUniverse(config_path: str = "config/config.json", rules_path: str =
         # nodos: calcular colores con prioridad: selección origen/destino > hypergiant rojo > constelación color > fallback
         node_colors = []
         for n in Gnx.nodes:
-            # color base: constelación o fallback
-            base_color = starToColor.get(n, "#444444")
-            # hipergiant tiene prioridad sobre color de constelación
-            try:
-                if Gnx.nodes[n].get("hypergiant"):
-                    base_color = "#ff3333"
-            except Exception:
-                pass
+            # determinar si pertenece a más de una constelación
+            constelation_count = sum(1 for c in constellations if n in c.get("stars", []))
+            is_multi_constellation = constelation_count >= 2
+
+            # color base: rojo si pertenece a más de una constelación, si no usar color de constelación
+            base_color = "#ff3333" if is_multi_constellation else starToColor.get(n, "#444444")
 
             # override por selección en handler
             if handler and getattr(handler, "selected_origin", None) == n:
                 node_colors.append("yellow")
             elif handler and getattr(handler, "selected_target", None) == n:
-                # destino seleccionado aparece azul antes de confirmar
                 node_colors.append("deepskyblue")
             else:
                 node_colors.append(base_color)
+
 
         node_sizes = [node_size(radii.get(n, 1.0), Gnx.nodes[n].get("hypergiant", False)) for n in Gnx.nodes]
         nx.draw_networkx_nodes(Gnx, pos, node_color=node_colors, node_size=node_sizes,
