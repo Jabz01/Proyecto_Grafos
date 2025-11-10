@@ -173,8 +173,6 @@ def VisualizeUniverse(config_path: str = "config/config.json", rules_path: str =
                     # calcular costo total con util
                     total_cost = path_total_cost(Gnx, path, weight='yearsCost')
                     total_sig = round_sig(total_cost, sig=3)
-                    ax.text(0.02, 0.98, f"Costo ruta: {total_sig}", transform=ax.transAxes,
-                            ha='left', va='top', color='white', fontsize=10, bbox=dict(facecolor='black', alpha=0.6))
         except Exception:
             pass
 
