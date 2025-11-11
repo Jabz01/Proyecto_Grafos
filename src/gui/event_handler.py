@@ -62,14 +62,8 @@ class EventHandler:
         
         initial_state_dict = self.graph_model.options.params.get("initial_state", {})
         self.burro_state = BurroState.build_initial_burro_state_from_json(initial_state_dict)
-        try:
-            initial_state_dict = self.graph_model.options.params.get("initial_state", {})
-            print("[DEBUG] JSON recibido para estado inicial:", initial_state_dict)
-            self.burro_state = BurroState.build_initial_burro_state_from_json(initial_state_dict)
-        except Exception as e:
-            print("[ERROR] No se pudo cargar el estado inicial del burro:", e)
-            self.burro_state = None
-
+        self._initial_state_dict = initial_state_dict
+        
         self._tooltip_texts = []
         self._tooltip_box = None
         self._tooltip_visible = False
@@ -341,20 +335,12 @@ class EventHandler:
                                 except Exception:
                                     factor = 0.05
 
-                            # abrimos el formulario PERO pasando sumas como None para que muestren "Desconocido"
-                            burro_info = {"estado": "pendiente"}
                             try:
                                 if self.form is None:
                                     self.form = RouteForm(self.fig,
                                                         on_compute=self.finalize_route_calculation,
                                                         on_close=self.close_form)
-                                # show recibe sum_ly/sum_years opcionales; pasamos None para que muestre "Desconocido"
-                                burro_before = self.burro_state
-                                burro_info = {
-                                    "before": burro_before,
-                                    "after": None  # aún no se ha calculado
-                                }
-                                self.form.show(origin_label, target_label, None, None, burro_info, factor=factor)
+                                self.form.show(origin_label, target_label, None, None, burro=self.burro_state, factor=factor)
 
                             except Exception as exc:
                                 print(f"[EventHandler] fallo abriendo formulario: {exc}")
@@ -443,6 +429,7 @@ class EventHandler:
         try:
             if self.form:
                 try:
+                    self.reset_burro_state()
                     self.form.hide()
                 except Exception:
                     pass
@@ -492,6 +479,8 @@ class EventHandler:
                 # mostrar los valores reales en el formulario (ya no "Desconocido")
                 burro_before = self.burro_state
                 burro_after, sums, events = simulate_path(burro_before, self.proposed_path, self.G, rules)
+                
+                
                 self.burro_state = burro_after
                 self.current_path = self.proposed_path
                 self.form.update(
@@ -499,7 +488,7 @@ class EventHandler:
                     target_label=target_label,
                     sum_ly=sums.get("sum_ly"),
                     sum_years=sums.get("sum_years"),
-                    burro_info={"before": burro_before, "after": burro_after},
+                    burro=burro_after,
                     factor=self.form._last_values.get("factor")
                 )
 
@@ -690,3 +679,15 @@ class EventHandler:
                 self._redraw()
         except Exception:
             pass
+
+
+    def reset_burro_state(self):
+        self.burro_state = BurroState.build_initial_burro_state_from_json(self._initial_state_dict)
+        self.form.show(
+            origin_label="(reiniciado)",
+            target_label="",
+            sum_ly=None,
+            sum_years=None,
+            burro=self.burro_state,
+            factor=self.form._last_values.get("factor")
+        )

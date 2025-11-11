@@ -13,7 +13,6 @@ def simulate_path(state: BurroState, path: List[int], G: Any, rules: Dict) -> Tu
     events = []
     sum_ly = 0.0
     sum_years = 0.0
-
     # Si el burro no tiene nodo asignado, lo colocamos en el primero sin penalización
     start_idx = 0
     if s.node is None and path:
@@ -45,4 +44,6 @@ def simulate_path(state: BurroState, path: List[int], G: Any, rules: Dict) -> Tu
             s.visited.add(v)
             events.append(f"visited {v}")
 
+        
+        
     return s, {"sum_ly": sum_ly, "sum_years": sum_years}, events

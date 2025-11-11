@@ -2,7 +2,7 @@
 import matplotlib.pyplot as plt
 from matplotlib.widgets import Button
 from typing import Optional, Callable
-
+from src.sim.burro_state import BurroState
 
 class RouteForm:
     """
@@ -12,7 +12,7 @@ class RouteForm:
 
     Uso:
       form = RouteForm(fig, on_compute=handler.finalize_route_calculation, on_close=handler.close_form)
-      form.show(origin_label, target_label, sum_ly, sum_years, burro_info, factor=factor)
+      form.show(origin_label, target_label, sum_ly, sum_years, burro, factor=factor)
     """
 
     def __init__(self,
@@ -43,7 +43,7 @@ class RouteForm:
             "sum_ly": None,
             "sum_years": None,
             "factor": None,
-            "burro_info": None
+            "burro": None
         }
 
         # Conectar callbacks
@@ -76,7 +76,7 @@ class RouteForm:
              target_label: str,
              sum_ly: Optional[float],
              sum_years: Optional[float],
-             burro_info: Optional[dict] = None,
+             burro: Optional[BurroState] = None,
              factor: Optional[float] = None):
         """
         Dibuja/actualiza el contenido del formulario y lo hace visible.
@@ -108,7 +108,7 @@ class RouteForm:
             "target_label": target_label,
             "sum_ly": sum_ly,
             "sum_years": sum_years,
-            "burro_info": burro_info,
+            "burro": burro,
             "factor": factor
         }
         # textos en español y con formato final cuando corresponda
@@ -119,26 +119,16 @@ class RouteForm:
             f"Años de costo (años de vida) total: {sum_years_s}",
             f"Factor conversión: {factor_text}",
         ]
-        burro_info = self._last_values.get("burro_info", {})
-        before = burro_info.get("before")
-        after = burro_info.get("after")
+        burro = self._last_values.get("burro", {})
 
         
-        if burro_info:
-            if before:
-                lines.append("Burro (antes):")
-                lines.append(f"  Energía: {before.energy_pct:.1f} %")
-                lines.append(f"  Vida restante: {before.life_years_left:.1f} años")
-                lines.append(f"  Salud: {before.health}")
-                lines.append(f"  Pasto: {before.grass_kg:.1f} kg")
-                lines.append(f"  Edad: {before.age_years:.1f} años")
-            if after:
-                lines.append("Burro (después):")
-                lines.append(f"  Energía: {after.energy_pct:.1f} %")
-                lines.append(f"  Vida restante: {after.life_years_left:.1f} años")
-                lines.append(f"  Salud: {after.health}")
-                lines.append(f"  Pasto: {after.grass_kg:.1f} kg")
-                lines.append(f"  Edad: {after.age_years:.1f} años")
+        if burro:
+            lines.append("Estado del burro:")
+            lines.append(f"  Energía: {burro.energy_pct:.1f} %")
+            lines.append(f"  Vida restante: {burro.life_years_left:.1f} años")
+            lines.append(f"  Salud: {burro.health}")
+            lines.append(f"  Pasto: {burro.grass_kg:.1f} kg")
+            lines.append(f"  Edad: {burro.age_years:.1f} años")
         else:
             lines.append("Burro: (pendiente)")
 
@@ -159,7 +149,7 @@ class RouteForm:
                target_label: Optional[str] = None,
                sum_ly: Optional[float] = None,
                sum_years: Optional[float] = None,
-               burro_info: Optional[dict] = None,
+               burro: Optional[BurroState] = None,
                factor: Optional[float] = None):
         """
         Actualiza el contenido manteniendo el overlay visible.
@@ -176,11 +166,11 @@ class RouteForm:
             cur["sum_ly"] = sum_ly
         if sum_years is not None:
             cur["sum_years"] = sum_years
-        if burro_info is not None:
-            cur["burro_info"] = burro_info
+        if burro is not None:
+            cur["burro"] = burro
         if factor is not None:
             cur["factor"] = factor
-        self.show(cur["origin_label"], cur["target_label"], cur["sum_ly"], cur["sum_years"], cur["burro_info"], factor=cur["factor"])
+        self.show(cur["origin_label"], cur["target_label"], cur["sum_ly"], cur["sum_years"], cur["burro"], factor=cur["factor"])
 
     def _current_values(self):
         """
