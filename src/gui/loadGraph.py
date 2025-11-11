@@ -18,8 +18,12 @@ def LoadGraphFromJson(configPath: str, rulesDict: dict = None) -> Tuple[Optional
         return None, warnings, errors
 
     # Combinar reglas externas con constelaciones del parser (si se entrega)
-    rules = rulesDict.copy() if rulesDict else {}
+    rules = {}
+    if rulesDict:
+        rules.update(rulesDict)
+    rules.update(data)  # incluye initial_state, ids, etc.
     rules["constellations"] = parserOutput.get("constellations", [])
+
 
     options = GraphOptions(rules or {})
     graph = GraphModel.BuildFromParserOutput(parserOutput, options)

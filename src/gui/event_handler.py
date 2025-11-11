@@ -9,7 +9,8 @@ from src.utils.visual import nearest_node_by_radius
 from src.utils.graph_utils import filtered_graph_nx
 from src.planner.dijkstra_planner import shortest_path_dijkstra
 from src.gui.route_form import RouteForm
-
+from src.sim.run_simulation import simulate_path
+from src.sim.burro_state import BurroState
 # constantes a nivel de módulo (usadas desde universe.py)
 MODE_NONE = 0
 MODE_BLOCK = 1
@@ -58,6 +59,27 @@ class EventHandler:
         self.form: Optional[RouteForm] = None
 
         self._clear_timer = None
+        
+        initial_state_dict = self.graph_model.options.params.get("initial_state", {})
+        self.burro_state = BurroState.build_initial_burro_state_from_json(initial_state_dict)
+        try:
+            initial_state_dict = self.graph_model.options.params.get("initial_state", {})
+            print("[DEBUG] JSON recibido para estado inicial:", initial_state_dict)
+            self.burro_state = BurroState.build_initial_burro_state_from_json(initial_state_dict)
+        except Exception as e:
+            print("[ERROR] No se pudo cargar el estado inicial del burro:", e)
+            self.burro_state = None
+
+        self._tooltip_texts = []
+        self._tooltip_box = None
+        self._tooltip_visible = False
+        if self.fig is not None and hasattr(self.fig.canvas, "mpl_connect"):
+            try:
+                self.fig.canvas.mpl_connect('motion_notify_event', self.on_motion)
+            except Exception:
+                pass
+        
+
 
     # ------------------ helpers visual / sync ------------------
 
@@ -327,7 +349,13 @@ class EventHandler:
                                                         on_compute=self.finalize_route_calculation,
                                                         on_close=self.close_form)
                                 # show recibe sum_ly/sum_years opcionales; pasamos None para que muestre "Desconocido"
+                                burro_before = self.burro_state
+                                burro_info = {
+                                    "before": burro_before,
+                                    "after": None  # aún no se ha calculado
+                                }
                                 self.form.show(origin_label, target_label, None, None, burro_info, factor=factor)
+
                             except Exception as exc:
                                 print(f"[EventHandler] fallo abriendo formulario: {exc}")
 
@@ -363,7 +391,8 @@ class EventHandler:
                 self.mode = MODE_NONE
                 threading.Thread(target=_worker, daemon=True).start()
                 return
-                # ----------------- bloqueo de arista ------------------
+                
+    # ----------------- bloqueo de arista ------------------
 
     def _handle_block_click(self, x: float, y: float):
         avg_radius = (sum(self.radii.values()) / len(self.radii)) if self.radii else 1.0
@@ -453,20 +482,27 @@ class EventHandler:
             # aplicar la ruta confirmada
             self.current_path = list(self.proposed_path)
             sums = dict(self.proposed_sums or {"sum_ly": 0.0, "sum_years": 0.0})
-
+            
+        rules = self.graph_model.options.params.get("rules", {})
         # actualizar el formulario para mostrar los valores confirmados (en español)
         try:
             if self.form:
                 origin_label = self.G.nodes[self.selected_origin].get("label", str(self.selected_origin))
                 target_label = self.G.nodes[self.selected_target].get("label", str(self.selected_target))
                 # mostrar los valores reales en el formulario (ya no "Desconocido")
-                self.form.update(origin_label=origin_label,
-                                target_label=target_label,
-                                sum_ly=sums.get("sum_ly"),
-                                sum_years=sums.get("sum_years"),
-                                burro_info=self.form._last_values.get("burro_info"),
-                                factor=self.form._last_values.get("factor"))
-                # deshabilitar el botón de calcular para indicar que ya se aplicó
+                burro_before = self.burro_state
+                burro_after, sums, events = simulate_path(burro_before, self.proposed_path, self.G, rules)
+                self.burro_state = burro_after
+                self.current_path = self.proposed_path
+                self.form.update(
+                    origin_label=origin_label,
+                    target_label=target_label,
+                    sum_ly=sums.get("sum_ly"),
+                    sum_years=sums.get("sum_years"),
+                    burro_info={"before": burro_before, "after": burro_after},
+                    factor=self.form._last_values.get("factor")
+                )
+
                 try:
                     self.form.set_compute_enabled(False)
                 except Exception:
@@ -503,3 +539,154 @@ class EventHandler:
         t.daemon = True
         t.start()
         self._clear_timer = t
+        
+        
+        # ------------------ Hover / tooltip (Matplotlib) ------------------
+
+    def on_motion(self, event):
+        """Handler para motion_notify_event: muestra tooltip cuando el cursor está sobre un nodo."""
+        try:
+            if event.xdata is None or event.ydata is None:
+                self._hide_tooltip()
+                return
+            # detectar nodo bajo cursor (usar mismo pick logic pero sin click)
+            node = self._pick_node_at_display(event.xdata, event.ydata)
+            if node is None:
+                self._hide_tooltip()
+                return
+            # construir tooltip context y renderizar
+            star_attrs = dict(self.G.nodes[node]) if node in self.G.nodes else {}
+            # obtener rules desde graph_model (se asume graph_model.options.params o similar)
+            rules = {}
+            try:
+                rules = getattr(self.graph_model, "options").params.get("rules", {}) if getattr(self.graph_model, "options", None) else {}
+            except Exception:
+                # fallback: intentar graph_model.options.get("params")
+                try:
+                    rules = getattr(self.graph_model, "options").get("params", {}).get("rules", {})
+                except Exception:
+                    rules = {}
+            # Si las rules están en la raíz (no dentro de 'rules'), permitir ambos
+            if not rules:
+                # intentar graph_model.options.params directamente
+                try:
+                    rules = getattr(self.graph_model, "options").params
+                except Exception:
+                    pass
+
+            from src.gui.ui_helpers import build_star_tooltip
+            ctx = build_star_tooltip(star_attrs, rules or {}, getattr(self, "burro_state", None))
+            # render
+            self._render_tooltip(node, event.xdata, event.ydata, ctx)
+        except Exception:
+            # en caso de fallo, asegurar que tooltip desaparece y no rompe UI
+            try:
+                self._hide_tooltip()
+            except Exception:
+                pass
+
+    def _render_tooltip(self, node, xdata, ydata, ctx):
+        """Dibuja la info-box simple con redraw completo."""
+        try:
+            ax = self.fig.axes[0] if (self.fig and self.fig.axes) else None
+            if ax is None:
+                return
+
+            # ocultar anterior
+            self._hide_tooltip()
+
+            # posicion en datos -> transformar a display para offset
+            trans = ax.transData
+            x_px, y_px = trans.transform((xdata, ydata))
+
+            # construir texto lines
+            lines = []
+            lines.append(ctx.get("title", f"Star #{ctx.get('id','?')}"))
+            lines.append(f"Investigación: {ctx.get('investigation_years_s','?')} años/visita")
+            lines.append(f"Comer: {ctx.get('time_per_kg_years_s','?')} años/kg")
+            lines.append(f"Consumo energía por visita: {ctx.get('energy_consumption_per_visit_pct_s','?')} %")
+            if ctx.get("recovery_per_1kg_pct_s") is not None:
+                lines.append(f"Recuperación por 1 kg: +{ctx.get('recovery_per_1kg_pct_s')} % ({ctx.get('recovery_note','')})")
+            lines.append(ctx.get("feeding_max_kg_text", ""))
+            lines.append(ctx.get("grass_text", ""))
+
+            # add notes if any
+            for n in ctx.get("notes", []):
+                lines.append(n)
+
+            # create bbox axes relative to figure using add_axes with transform = figure coords
+            # compute figure coords from display px
+            fig_w, fig_h = self.fig.get_size_inches() * self.fig.dpi
+            # convert px back to figure fraction
+            fx = x_px / fig_w
+            fy = y_px / fig_h
+
+            # offset to top-right by small amount (clamp to [0,1])
+            off_x = 0.02
+            off_y = 0.02
+            fx += off_x
+            fy += off_y
+            fx = min(max(0.01, fx), 0.95)
+            fy = min(max(0.05, fy), 0.95)
+
+            # width/height heuristics
+            w = 0.22
+            h = max(0.10, 0.04 * len(lines))
+
+            # create axes for tooltip
+            ax_box = self.fig.add_axes([fx, fy - h, w, h], zorder=50)
+            ax_box.set_facecolor("#1c1c1c")
+            ax_box.set_xticks([])
+            ax_box.set_yticks([])
+            for spine in ax_box.spines.values():
+                spine.set_color("#444444")
+
+            y_rel = 0.88
+            text_artists = []
+            for ln in lines:
+                t = ax_box.text(0.05, y_rel, ln, color="white", fontsize=9,
+                                transform=ax_box.transAxes, ha="left", va="center")
+                text_artists.append(t)
+                y_rel -= 0.14
+
+            # save
+            self._tooltip_box = ax_box
+            self._tooltip_texts = text_artists
+            self._tooltip_visible = True
+            # force redraw
+            try:
+                if hasattr(self.fig.canvas, "draw_idle"):
+                    self.fig.canvas.draw_idle()
+                else:
+                    self._redraw()
+            except Exception:
+                self._redraw()
+        except Exception:
+            pass
+
+    def _hide_tooltip(self):
+        try:
+            if getattr(self, "_tooltip_texts", None):
+                for t in list(self._tooltip_texts):
+                    try:
+                        t.remove()
+                    except Exception:
+                        pass
+                self._tooltip_texts = []
+            if getattr(self, "_tooltip_box", None):
+                try:
+                    self._tooltip_box.remove()
+                except Exception:
+                    pass
+                self._tooltip_box = None
+            self._tooltip_visible = False
+            # redraw to remove artifacts
+            try:
+                if hasattr(self.fig.canvas, "draw_idle"):
+                    self.fig.canvas.draw_idle()
+                else:
+                    self._redraw()
+            except Exception:
+                self._redraw()
+        except Exception:
+            pass

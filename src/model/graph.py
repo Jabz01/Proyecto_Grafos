@@ -43,7 +43,7 @@ class GraphModel:
                     "label": s.label,
                     "coordinates": s.coordinates,
                     "radius": s.radius,
-                    "timeToEatHoursPerKg": s.timeToEatHoursPerKg,
+                    "timeToEatYearsPerKg": s.timeToEatYearsPerKg,
                     "hypergiant": s.hypergiant,
                     "investigations": [inv.__dict__ for inv in s.investigations]
                 })
@@ -66,7 +66,7 @@ class GraphModel:
             "label": s.label,
             "coordinates": s.coordinates,
             "radius": s.radius,
-            "timeToEatHoursPerKg": s.timeToEatHoursPerKg,
+            "timeToEatYearsPerKg": s.timeToEatYearsPerKg,
             "hypergiant": s.hypergiant,
             "investigations": [inv.__dict__ for inv in s.investigations]
         })
@@ -218,7 +218,7 @@ class GraphModel:
                 label=s.get("label", s.get("etiqueta", f"star{s['id']}")),
                 coordinates={"x": float(s["coordinates"]["x"]), "y": float(s["coordinates"]["y"])},
                 radius=float(s.get("radius", 0.5)),
-                timeToEatHoursPerKg=float(s.get("timeToEatHoursPerKg", s.get("timeToEatHoursPerKg", 1))),
+                timeToEatYearsPerKg=float(s.get("timeToEatYearsPerKg", s.get("timeToEatYearsPerKg", 1))),
                 hypergiant=bool(s.get("hypergiant", False)),
                 investigations=[]
             )

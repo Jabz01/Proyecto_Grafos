@@ -25,10 +25,10 @@ class RouteForm:
 
         # Axes del overlay (contenedor y controles)
         # Caja principal arriba-izquierda
-        self.ax_box = fig.add_axes([0.02, 0.84, 0.30, 0.14])
+        self.ax_box = fig.add_axes([0.02, 0.72, 0.35, 0.26])
         # Botones debajo de la caja
-        self.ax_compute = fig.add_axes([0.02, 0.78, 0.14, 0.05])
-        self.ax_close = fig.add_axes([0.18, 0.78, 0.14, 0.05])
+        self.ax_compute = fig.add_axes([0.02, 0.66, 0.14, 0.05])
+        self.ax_close = fig.add_axes([0.18, 0.66, 0.14, 0.05])
 
         # Widgets
         self.btn_compute = Button(self.ax_compute, "Calcular")
@@ -87,14 +87,7 @@ class RouteForm:
         self._clear_texts()
 
         # Guardar últimos valores para poder actualizar después
-        self._last_values.update({
-            "origin_label": origin_label,
-            "target_label": target_label,
-            "sum_ly": sum_ly,
-            "sum_years": sum_years,
-            "factor": factor,
-            "burro_info": burro_info
-        })
+
 
         # preparar strings con fallback "Desconocido"
         sum_ly_s = f"{sum_ly:.3g}" if (sum_ly is not None) else "Desconocido"
@@ -109,6 +102,15 @@ class RouteForm:
         except Exception:
             factor_text = "Desconocido"
 
+        
+        self._last_values = {
+            "origin_label": origin_label,
+            "target_label": target_label,
+            "sum_ly": sum_ly,
+            "sum_years": sum_years,
+            "burro_info": burro_info,
+            "factor": factor
+        }
         # textos en español y con formato final cuando corresponda
         lines = [
             f"Origen: {origin_label}",
@@ -117,18 +119,37 @@ class RouteForm:
             f"Años de costo (años de vida) total: {sum_years_s}",
             f"Factor conversión: {factor_text}",
         ]
+        burro_info = self._last_values.get("burro_info", {})
+        before = burro_info.get("before")
+        after = burro_info.get("after")
+
+        
         if burro_info:
-            for k, v in burro_info.items():
-                lines.append(f"Burro {k}: {v}")
+            if before:
+                lines.append("Burro (antes):")
+                lines.append(f"  Energía: {before.energy_pct:.1f} %")
+                lines.append(f"  Vida restante: {before.life_years_left:.1f} años")
+                lines.append(f"  Salud: {before.health}")
+                lines.append(f"  Pasto: {before.grass_kg:.1f} kg")
+                lines.append(f"  Edad: {before.age_years:.1f} años")
+            if after:
+                lines.append("Burro (después):")
+                lines.append(f"  Energía: {after.energy_pct:.1f} %")
+                lines.append(f"  Vida restante: {after.life_years_left:.1f} años")
+                lines.append(f"  Salud: {after.health}")
+                lines.append(f"  Pasto: {after.grass_kg:.1f} kg")
+                lines.append(f"  Edad: {after.age_years:.1f} años")
         else:
             lines.append("Burro: (pendiente)")
 
-        y = 0.85
+        y = 0.95
         for ln in lines:
+            if y < 0.02:
+                break
             txt = self.ax_box.text(0.05, y, ln, color="white", fontsize=10,
                                    transform=self.ax_box.transAxes, ha="left", va="center")
             self._texts.append(txt)
-            y -= 0.16
+            y -= 0.08
 
         self._set_axes_visible(True)
         self.fig.canvas.draw_idle()

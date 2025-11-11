@@ -19,7 +19,7 @@ class Star:
     label: str
     coordinates: Dict[str, float]
     radius: float
-    timeToEatHoursPerKg: float
+    timeToEatYearsPerKg: float
     hypergiant: bool = False
     investigations: List[Investigation] = field(default_factory=list)
 

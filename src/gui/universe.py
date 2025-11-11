@@ -31,7 +31,7 @@ def VisualizeUniverse(config_path: str = "config/config.json", rules_path: str =
     Gnx = graph.ToNetworkX()
     from src.sim.populate_star_defaults import populate_star_defaults
     populate_star_defaults(Gnx.nodes(data=True), seed=graph.options.params.get("simulationSeed"))
-
+    
     constellations = graph.options.params.get("constellations", [])
 
     # mapear color y constelación por estrella (valores por defecto)
@@ -190,7 +190,17 @@ def VisualizeUniverse(config_path: str = "config/config.json", rules_path: str =
         plt.draw()
 
     # instanciar handler y registrar clicks
+    burro_state = None
+    try:
+        burro_state = getattr(graph, "burro_state", None) or graph.options.params.get("initialBurroState", None)
+    except Exception:
+        burro_state = None
+
     handler = EventHandler(graph, Gnx, pos, radii, redraw_callback=redraw, set_instruction_callback=set_instruction, fig=fig)
+    # inyectar burro_state si existe
+    if burro_state is not None:
+        handler.burro_state = burro_state
+
     fig.canvas.mpl_connect('button_press_event', handler.on_click)
 
     # botones (usar select_route como botón global para iniciar selección)

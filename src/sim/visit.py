@@ -17,57 +17,74 @@ def _improve_health(curr: str) -> str:
         i = order.index(curr)
     except ValueError:
         return curr
-    # si ya está en la cima (Excellent), no mejora
     if i == 0:
         return curr
-    # mejorar un paso hacia "Excellent" (i - 1)
     return order[i - 1]
 
 def simulate_visit(state: BurroState, star_attrs: Dict, rules: Dict, user_overrides: Optional[Dict]=None) -> Tuple[BurroState, List[str]]:
+    """
+    Simula la visita del burro a una estrella.
+    Reglas aplicadas:
+     - inv_years: años dedicados a investigación (puede venir por override)
+     - Comer: solo si energy_pct < threshold; limitado por tiempo disponible (maxFractionOfStayForEating * inv_years)
+             y por stock de la nave (s.grass_kg). No hay coste por comer, solo ganancia por kg según salud.
+     - Investigación: consume energía = inv_years * invest_energy_per_year_pct.
+     - Outcomes de investigación (illness / success / neutral) se aplican una única vez y se registran en last_event.
+     - Hypergiant: recarga relativa (+50% del nivel actual) y duplica stock de pasto según reglas.
+    """
     s = state.clone()
     events: List[str] = []
     uo = user_overrides or {}
 
-    # INVESTIGATION YEARS
+    # INVESTIGATION YEARS (override > star_attrs)
     inv_years = float(uo.get("investigation_years", star_attrs.get("investigation_years", 0.0)))
 
-    # EATING (unchanged)
+    # -------------- EATING (limitado por tiempo y stock; no cap reglamentario) --------------
     max_frac = rules.get("timeAndLife", {}).get("maxFractionOfStayForEating", 0.5)
+    # time_per_kg_years debe estar en años por kg (model usa años)
     time_per_kg_years = float(star_attrs.get("time_per_kg_years", star_attrs.get("time_to_consume_kg_years", 1.0)))
-    max_eat_years = inv_years * max_frac
+    # máximo de años que puede dedicar a comer durante la visita
+    max_eat_years = inv_years * float(max_frac)
+    # cuántos kg permite ese tiempo (años disponibles / años por kg)
     max_kg_by_time = (max_eat_years / time_per_kg_years) if time_per_kg_years > 0 else float('inf')
 
+    # reglas de alimentación mínimas del sistema
     eat_threshold = rules.get("feeding", {}).get("eatOnlyIfEnergyBelowPercent", 50)
     min_kg = rules.get("feeding", {}).get("minKgPerEat", 0.1)
-    max_kg_cap = star_attrs.get("max_kg_consumable_per_visit_kg", rules.get("feeding", {}).get("maxKgConsumablePerVisitKg"))
-    if max_kg_cap is None:
-        max_kg_cap = float('inf')
 
     ate_kg = 0.0
-    if s.energy_pct < eat_threshold and s.grass_kg > 0 and max_kg_by_time > 0:
+    # Comer solo si energía por debajo del umbral y hay stock en la nave
+    if s.energy_pct < eat_threshold and getattr(s, "grass_kg", 0.0) > 0 and max_kg_by_time > 0:
         desired = max_kg_by_time
         if desired < min_kg:
             desired = min_kg
-        desired = min(desired, s.grass_kg, max_kg_cap)
-        eg_map = rules.get("energy", {}).get("energyGainPerKgByHealthPercent", {})
-        gain_per_kg = eg_map.get(s.health, eg_map.get("Good", 3))
-        old_energy = s.energy_pct
-        s.grass_kg = max(0.0, s.grass_kg - desired)
-        s.apply_energy_delta(gain_per_kg * desired, rules)
-        ate_kg = desired
-        gained = s.energy_pct - old_energy
-        events.append(f"ate {desired:.3f}kg (+{gained:.4f}%)")
-        s.add_log(f"Ate {desired:.6f} kg -> +{gained:.4f}% energy")
+        # limitar por stock disponible del burro/nave (no hay cap reglamentario)
+        desired = min(desired, s.grass_kg)
+        if desired > 0:
+            eg_map = rules.get("energy", {}).get("energyGainPerKgByHealthPercent", {})
+            gain_per_kg = eg_map.get(s.health, eg_map.get("Good", 3))
+            old_energy = s.energy_pct
+            # consumir stock de la nave
+            s.grass_kg = max(0.0, s.grass_kg - desired)
+            # aplicar ganancia (sin coste)
+            s.apply_energy_delta(gain_per_kg * desired, rules)
+            ate_kg = desired
+            gained = s.energy_pct - old_energy
+            events.append(f"ate {desired:.3f}kg (+{gained:.4f}%)")
+            s.add_log(f"Ate {desired:.6f} kg -> +{gained:.4f}% energy")
 
-    # INVESTIGATION ENERGY CONSUMPTION
-    invest_energy_pct_per_year = star_attrs.get("invest_energy_per_year_pct", rules.get("energy", {}).get("energyLossPerInvestigationYearPercent", 0.0))
+    # -------------- INVESTIGATION ENERGY CONSUMPTION (solo por investigar) --------------
+    invest_energy_pct_per_year = star_attrs.get(
+        "invest_energy_per_year_pct",
+        rules.get("energy", {}).get("energyLossPerInvestigationYearPercent", 0.0)
+    )
     total_invest_loss = inv_years * float(invest_energy_pct_per_year)
     old_energy = s.energy_pct
     s.apply_energy_delta(-total_invest_loss, rules)
     events.append(f"Investigated {inv_years:.4f}y -> energy {-total_invest_loss:.4f}%")
     s.add_log(f"Investigated {inv_years:.4f}y -> energy {-total_invest_loss:.4f}%")
 
-    # EFFECTS from star (life_delta, health_delta)
+    # -------------- EFFECTS from star (life_delta, health_delta) --------------
     effects = {}
     effects.update(star_attrs.get("effects", {}) or {})
     effects.update(uo.get("effects", {}) or {})
@@ -82,15 +99,14 @@ def simulate_visit(state: BurroState, star_attrs: Dict, rules: Dict, user_overri
         events.append(f"health_set_to {health_delta}")
         s.add_log(f"Health set to {health_delta}")
 
-    # --- New: Investigation outcome (illness / success / neutral) ---
-    # Configurable probabilities and ranges via rules.timeAndLife.investigation
+    # -------------- Investigation outcome (illness / success / neutral) --------------
     inv_cfg = rules.get("timeAndLife", {}).get("investigation", {})
     p_ill = float(inv_cfg.get("p_illness", 0.0))
     p_succ = float(inv_cfg.get("p_success", 0.0))
     ill_range = inv_cfg.get("illness_life_loss_range", [1.0, 3.0])
     succ_range = inv_cfg.get("success_life_gain_range", [0.0, 1.0])
+    succ_improve_p = float(inv_cfg.get("success_improve_health_p", 0.0))
 
-    # use state's RNG if present, else rules seed, else global random
     rng = s.get_rng(rules)
     r = rng.random()
 
@@ -103,37 +119,10 @@ def simulate_visit(state: BurroState, star_attrs: Dict, rules: Dict, user_overri
         "energy_delta": s.energy_pct - old_energy,
         "note": ""
     }
-    if inv_years > 0 and (p_ill > 0 or p_succ > 0):
-        if r < p_ill:
-            # illness outcome (igual que antes)
-            ...
-        elif r < (p_ill + p_succ):
-            # successful outcome (nuevo comportamiento añadido)
-            life_gain = float(rng.uniform(float(succ_range[0]), float(succ_range[1])))
-            s.apply_life_delta(life_gain)
 
-            # posibilidad de mejorar health un nivel
-            succ_improve_p = float(inv_cfg.get("success_improve_health_p", 0.0))
-            improved = False
-            if succ_improve_p > 0.0:
-                r2 = rng.random()
-                old_health = s.health
-                if r2 < succ_improve_p:
-                    new_health = _improve_health(old_health)
-                    if new_health != old_health:
-                        s.health = new_health
-                        improved = True
-
-            outcome_struct.update({"outcome": "successful", "life_delta": life_gain, "health_from": old_health, "health_to": s.health})
-            if improved:
-                events.append(f"investigate:successful(+{life_gain:.2f}y)->health {old_health}->{s.health}")
-                s.add_log(f"Investigation success improved health: {old_health}->{s.health}")
-            else:
-                events.append(f"investigate:successful(+{life_gain:.2f}y)")
-                s.add_log(f"Investigation success: +{life_gain:.2f}y")
-    if inv_years > 0 and (p_ill > 0 or p_succ > 0):
+    if inv_years > 0 and (p_ill > 0.0 or p_succ > 0.0):
+        # illness
         if r < p_ill:
-            # illness outcome
             life_loss = -float(rng.uniform(float(ill_range[0]), float(ill_range[1])))
             old_health = s.health
             new_health = _degrade_health(old_health)
@@ -142,13 +131,26 @@ def simulate_visit(state: BurroState, star_attrs: Dict, rules: Dict, user_overri
             outcome_struct.update({"outcome": "illness", "life_delta": life_loss, "health_from": old_health, "health_to": new_health})
             events.append(f"investigate:illness({life_loss:.2f}y)->health {old_health}->{new_health}")
             s.add_log(f"Investigation caused illness: {life_loss:.2f}y, health {old_health}->{new_health}")
+        # success
         elif r < (p_ill + p_succ):
-            # successful outcome
             life_gain = float(rng.uniform(float(succ_range[0]), float(succ_range[1])))
+            old_health = s.health
             s.apply_life_delta(life_gain)
-            outcome_struct.update({"outcome": "successful", "life_delta": life_gain})
-            events.append(f"investigate:successful(+{life_gain:.2f}y)")
-            s.add_log(f"Investigation success: +{life_gain:.2f}y")
+            improved = False
+            if succ_improve_p > 0.0:
+                r2 = rng.random()
+                if r2 < succ_improve_p:
+                    new_health = _improve_health(old_health)
+                    if new_health != old_health:
+                        s.health = new_health
+                        improved = True
+            outcome_struct.update({"outcome": "successful", "life_delta": life_gain, "health_from": old_health, "health_to": s.health})
+            if improved:
+                events.append(f"investigate:successful(+{life_gain:.2f}y)->health {old_health}->{s.health}")
+                s.add_log(f"Investigation success improved health: {old_health}->{s.health}")
+            else:
+                events.append(f"investigate:successful(+{life_gain:.2f}y)")
+                s.add_log(f"Investigation success: +{life_gain:.2f}y")
         else:
             outcome_struct["outcome"] = "neutral"
             events.append("investigate:neutral")
@@ -158,25 +160,28 @@ def simulate_visit(state: BurroState, star_attrs: Dict, rules: Dict, user_overri
     s.last_event = outcome_struct
     s.event_log.append(outcome_struct)
 
-    # hypergiant handling (unchanged)
+    # -------------- Hypergiant handling --------------
     if star_attrs.get("hypergiant"):
         hg = rules.get("hypergiant", {})
+        # Aplicar recarga relativa: +50% del nivel actual (si quieres usar multiplier de rules,
+        # ajusta la línea siguiente para usar hg.get('energyRechargeMultiplier'))
+        relative_recharge_fraction = 0.5
         old_e = s.energy_pct
-        s.apply_energy_delta(50.0, rules)
-        dup = hg.get("grassDuplicateMultiplier", 2)
-        s.grass_kg *= dup
+        s.apply_energy_delta(old_e * relative_recharge_fraction, rules)
+        dup = int(hg.get("grassDuplicateMultiplier", 2))
+        s.grass_kg = s.grass_kg * dup
         events.append(f"Hypergiant +{s.energy_pct - old_e:.4f} energy, grass x{dup}")
         s.add_log(f"Used hypergiant: +{s.energy_pct - old_e:.4f} energy, grass x{dup}")
 
-    # mark visited
+    # -------------- mark visited --------------
     if not hasattr(s, "visited") or s.visited is None:
         s.visited = set()
     s.visited.add(s.node)
 
-    # death check
+    # -------------- death check --------------
     if s.energy_pct <= 0 or getattr(s, "life_years_left", 1e9) <= 0:
         s.health = "Dead"
         events.append("DIED_DURING_VISIT")
         s.add_log("Death during visit")
-    
+
     return s, events

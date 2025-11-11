@@ -24,7 +24,7 @@
       "label": "Alpha1",
       "coordinates": { "x": 25, "y": 34 },
       "radius": 1.2,
-      "timeToEatHoursPerKg": 3,
+      "timeToEatYearsPerKg": 3,
       "hypergiant": false,
       "investigations": []
     },
@@ -33,7 +33,7 @@
       "label": "Beta23",
       "coordinates": { "x": 37, "y": 15 },
       "radius": 1.5,
-      "timeToEatHoursPerKg": 2,
+      "timeToEatYearsPerKg": 2,
       "hypergiant": false,
       "investigations": []
     },
@@ -42,7 +42,7 @@
       "label": "Alpha53",
       "coordinates": { "x": 75, "y": 43 },
       "radius": 2.0,
-      "timeToEatHoursPerKg": 1,
+      "timeToEatYearsPerKg": 1,
       "hypergiant": true,
       "investigations": []
     },
@@ -51,7 +51,7 @@
       "label": "Star4",
       "coordinates": { "x": 10, "y": 60 },
       "radius": 1.0,
-      "timeToEatHoursPerKg": 2,
+      "timeToEatYearsPerKg": 2,
       "hypergiant": false,
       "investigations": []
     },
@@ -60,7 +60,7 @@
       "label": "Star5",
       "coordinates": { "x": 55, "y": 70 },
       "radius": 1.6,
-      "timeToEatHoursPerKg": 2,
+      "timeToEatYearsPerKg": 2,
       "hypergiant": false,
       "investigations": []
     },
@@ -69,7 +69,7 @@
       "label": "Star7",
       "coordinates": { "x": 140, "y": 8 },
       "radius": 1.0,
-      "timeToEatHoursPerKg": 2,
+      "timeToEatYearsPerKg": 2,
       "hypergiant": false,
       "investigations": []
     },
@@ -78,7 +78,7 @@
       "label": "Star9",
       "coordinates": { "x": 120, "y": 70 },
       "radius": 1.3,
-      "timeToEatHoursPerKg": 1,
+      "timeToEatYearsPerKg": 1,
       "hypergiant": false,
       "investigations": []
     },
@@ -87,7 +87,7 @@
       "label": "Star11",
       "coordinates": { "x": 195, "y": 160 },
       "radius": 1.5,
-      "timeToEatHoursPerKg": 3,
+      "timeToEatYearsPerKg": 3,
       "hypergiant": false,
       "investigations": []
     },
@@ -96,7 +96,7 @@
       "label": "Beta178",
       "coordinates": { "x": 123, "y": 167 },
       "radius": 1.2,
-      "timeToEatHoursPerKg": 3,
+      "timeToEatYearsPerKg": 3,
       "hypergiant": false,
       "investigations": []
     },
@@ -105,7 +105,7 @@
       "label": "Gama23",
       "coordinates": { "x": 189, "y": 100 },
       "radius": 2.0,
-      "timeToEatHoursPerKg": 3,
+      "timeToEatYearsPerKg": 3,
       "hypergiant": true,
       "investigations": []
     },
@@ -114,7 +114,7 @@
       "label": "Star14",
       "coordinates": { "x": 140, "y": 200 },
       "radius": 1.2,
-      "timeToEatHoursPerKg": 2,
+      "timeToEatYearsPerKg": 2,
       "hypergiant": false,
       "investigations": []
     },
@@ -123,7 +123,7 @@
       "label": "Star15",
       "coordinates": { "x": 220, "y": 130 },
       "radius": 1.0,
-      "timeToEatHoursPerKg": 2,
+      "timeToEatYearsPerKg": 2,
       "hypergiant": false,
       "investigations": []
     },
@@ -132,7 +132,7 @@
       "label": "Star17",
       "coordinates": { "x": 160, "y": 140 },
       "radius": 1.1,
-      "timeToEatHoursPerKg": 2,
+      "timeToEatYearsPerKg": 2,
       "hypergiant": false,
       "investigations": []
     }
